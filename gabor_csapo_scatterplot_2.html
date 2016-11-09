@@ -1,0 +1,287 @@
+<!--The user has to be able to:
+Select a dot and see its Name, GDP per Capita and Easy of Business above the scatterplot.
+Remove a dot by using the right click
+When mouse is over the a dot.
+It should be highlighted (change size and/or color)
+A tool tip should be displayed with Name, GDP per Capita and Easy of Business of the country
+Complete two dropdown lists in the UI div for selecting the data dimensions(GDP per Capita, Ease of Business, Hours to do Tax, Health Exp/Capita, Life Expectancy Female, Life Expectancy Male) to be plotted as x-axis and y-axis. 
+You shall not hard code the dimensions.
+Query: 
+After the “Query GDP” button    is pressed, the     visualization is updated to render only those countries with GDP per Capita in the range defined by the gdp-min, gdp-max input box.
+Make sure “Query GDP” also works when neither x-axis nor y-axis is GDP per Capita. 
+Enable zoom-in and zoom-out on the scatterplot to rescale the axes. 
+ 
+Note:
+D3 rendering must use the enter/exit/update    data mapping.    You shall not clear the     entire svg every time    before rendering.
+GDP means ‘GDP per Capita’ column in the data file. 
+The page should still load the previous CSV file and only use the data in year 2012 to visualize.
+Check the 2 demos and http://bl.ocks.org/stepheneb/1182434 for a better understanding about the requirements.
+ -->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Gabor Csapo Scatterplot Assignment 2</title>
+    <link href='https://fonts.googleapis.com/css?family=Montserrat' rel='stylesheet' type='text/css'>
+    <style>
+      body {
+        font-family: 'Montserrat', sans-serif;
+      }
+      circle {
+          fill: red;
+          opacity: 0.5;
+      }
+      .text {
+          height: 100px;
+          width: 100%;
+      }
+      .d3-tip {
+        line-height: 1;
+        font-weight: bold;
+        padding: 12px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        border-radius: 2px;
+        pointer-events: none;
+      }
+
+      /* Creates a small triangle extender for the tooltip */
+      .d3-tip:after {
+        box-sizing: border-box;
+        display: inline;
+        font-size: 10px;
+        width: 100%;
+        line-height: 1;
+        color: rgba(0, 0, 0, 0.8);
+        position: absolute;
+        pointer-events: none;
+      }
+
+      /* Northward tooltips */
+      .d3-tip.n:after {
+        content: "\25BC";
+        margin: -1px 0 0 0;
+        top: 100%;
+        left: 0;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class='chart'>
+      <!-- /the chart goes here -->
+    </div>
+    <div class="text"></div>
+    <select id="x-axis">
+      <option selected="selected" value="GDP per Capita">GDP per capita</option>
+      <option value="Ease of Business">Ease of Business</option>
+      <option value="Health Exp/Capita">Health Exp/Capita</option>
+    </select> 
+    <select id="y-axis">
+      <option value="GDP per Capita">GDP per capita</option>
+      <option selected="selected" value="Ease of Business">Ease of Business</option>
+      <option value="Health Exp/Capita">Health Exp/Capita</option>
+    </select>
+    <form onsubmit="query()">
+      <input id="min" type="number">
+      <input id="max" type="number">
+      <input type="submit">
+    </form>
+
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="tip.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-tip/0.7.1/d3-tip.min.js"></script>
+    <script type="text/javascript">
+      var selection = ['GDP per Capita', 'Ease of Business', 'Hours to do Tax', 'Health Exp/Capita', 'Life Expectancy Female', 'Life Expectancy Male'];
+      
+      d3.selectAll('select')
+      .selectAll('option')
+      .data(selection).enter()
+      .append('option')
+      .text(function(d){return d;})
+      
+      //calculations made for the containers
+      var margin = {top: 20, right: 15, bottom: 60, left: 60}, 
+      width = 600 - margin.left - margin.right, 
+      height = 500 - margin.top - margin.bottom;
+
+      //outer container
+      var content = d3.select(".chart")
+              .append("svg:svg") //note: this is returned by the function
+              .attr('width', width + margin.right + margin.left)
+              .attr('height', height + margin.top + margin.bottom)
+
+      //inner svg group
+      var svgContainer = content.append("g")
+          .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')')
+          .attr('width', width)
+          .attr('height', height)
+          .attr('class', 'svg-container');
+
+      //loading CSV
+      var parseDate = d3.timeParse("%m/%d/%Y");
+      var csv;
+      var filteredCSV;
+      var newCircle;
+      var xscale;
+      var yscale;
+      var x = d3.scaleLinear().range([0, width]);
+      var y = d3.scaleLinear().range([height, 0]);
+      var xAxis = d3.axisBottom().scale(x);
+      var gX = svgContainer.append('g')
+      .attr("class", "x axis")
+      .attr('transform', 'translate(0,' + height + ')')
+      .attr('class', 'x axis')
+      .call(xAxis);
+      
+      var yAxis = d3.axisLeft().scale(y);
+      var gY = svgContainer.append('g')
+      .attr('transform', 'translate(0,0)')
+      .attr('class', 'y axis')
+      .call(yAxis);
+
+      var objects = svgContainer.append("svg")
+      .attr("width", width)
+      .attr("height", height);
+      
+      var tip = d3.tip()
+        .attr("class", "d3-tip")
+        .offset([-10, 0])
+        .html(function(d) {
+          return d["Country"] + "<br>GDP per C: " + d["GDP per Capita"] + "<br>EoB: " + d["Ease of Business"];
+      });
+      svgContainer.call(tip);
+
+      var scaleAxis = function(yinput, xinput){
+        if (xinput == undefined){
+          gX.transition()
+          .duration(1000)
+          .call(xAxis)
+        } else {
+          gX.transition()
+          .duration(1000)
+          .call(xAxis.scale(xinput))
+        }
+        if (yinput == undefined){
+          gY.transition()
+          .duration(1000)
+          .call(yAxis)
+        } else {
+          gY.transition()
+          .duration(1000)
+          .call(yAxis.scale(yinput))
+        }
+      }
+
+      function zoom() {
+        xscale = d3.event.transform.rescaleX(x);
+        yscale = d3.event.transform.rescaleY(y);
+        scaleAxis(yscale, xscale);
+        svgContainer.selectAll("circle")
+            .attr('transform', 'translate(' + d3.event.transform.x + ',' + d3.event.transform.y + ') scale(' + d3.event.transform.k + ')')
+            .attr("r", 5*1/d3.event.transform.k)  
+      }
+      
+      var zoomBeh = d3.zoom()
+      .scaleExtent([0, 500])
+      .on("zoom", zoom)
+      .on("start", null);
+
+      content.call(zoomBeh);
+
+      
+      d3.csv('data.csv', function(error, dataset){
+        csv = dataset.filter(function(row) {
+          //filtering for items that are from 2012 and don't have undefined values
+          for (var i = 0; i < selection.length; i++) {
+            if (row[selection[i]].replace(/\$|,/g, '') == '')
+              return false;
+          }
+          return parseDate(row['Year']).getFullYear() == '12'; 
+        })
+        filteredCSV = csv;
+        update();
+      })
+        
+      d3.selectAll("select").on("change", function() {
+          update();      
+      }); 
+
+      var update = function(){
+        var Xvalue = document.getElementById('x-axis').value;
+        var Yvalue = document.getElementById('y-axis').value;
+        x.domain([0, d3.max(filteredCSV, function(d) {
+          return parseFloat(d[Xvalue].replace(/\$|,/g, ''))})]);
+        y.domain([0, d3.max(filteredCSV, function(d) {
+          return parseFloat(d[Yvalue].replace(/\$|,/g, ''))})]);
+        
+        xAxis = d3.axisBottom().scale(x);
+                
+        yAxis = d3.axisLeft().scale(y);
+        
+        scaleAxis(yscale, xscale);  
+        
+        
+        oldCircle = objects.selectAll("circle")
+          .data(filteredCSV, function(d) { return d["Country"]; });
+        
+        oldCircle.exit().remove();
+
+        newCircle = oldCircle
+          .enter()
+          .append("circle")
+          .attr("r", 5)
+          .on("mouseover", function(d,i) {
+            tip.show(d)
+            d3.select(d3.event.target)
+              .style('fill','blue')
+              .attr('r', 7);
+          })
+          .on("mouseout", function(d,i) {
+            tip.hide(d)
+            d3.select(d3.event.target)
+              .style('fill','red')
+              .attr('r', 5);
+          })
+          .on('click', function (d, i) {
+	            d3.select(".text").text(d["Country"] + "'s GDP per capita is " + d['GDP per Capita'] + ", while the Ease of Business is " + d['Ease of Business'] + ".");
+	        })
+          .on('contextmenu',function (d,i) {
+            d3.event.preventDefault();
+            tip.hide;
+            for(var i = 0; i < csv.length; i++) {
+              if (csv[i]["Country"] == d["Country"]) {
+                  csv.splice(i,1);
+                  break;
+              }        
+            }
+            update();
+          })
+          
+        .merge(oldCircle)          
+          .transition()  // Transition from old to new
+          .duration(1000)  // Length of animation
+          .delay(function(d, i) {
+              return Math.random()*500;})
+          .attr("cx" , function(d,i){
+            return x(parseFloat(d[Xvalue].replace(/\$|,/g, '')))})
+          .attr("cy", function(d,i){
+            return y(parseFloat(d[Yvalue].replace(/\$|,/g, '')))})
+       
+        oldCircle.exit().remove();
+        
+      } 
+
+      var query = function(min, max){
+        event.preventDefault();
+        var min = parseInt(document.getElementById("min").value);
+        var max = parseInt(document.getElementById("max").value);
+        filteredCSV = csv.filter(function(row){
+          console.log(parseFloat(row['GDP per Capita'].replace(/\$|,/g, '')));
+          return parseFloat(row['GDP per Capita'].replace(/\$|,/g, '')) > min && parseFloat(row['GDP per Capita'].replace(/\$|,/g, '')) < max;
+        })
+        update();
+      } 
+    </script>
+  </body>
+</html>
